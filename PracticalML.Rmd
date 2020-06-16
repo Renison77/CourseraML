@@ -1,0 +1,124 @@
+---
+title: "PracticalMLAssignment"
+author: "Renison Macwan"
+date: "15/06/2020"
+output: html_document
+---
+## Goal
+The goal of your project is to predict the manner in which they did the exercise. This is the “classe” variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+## Reproducibility
+We have set seed to make this project reproducible.
+
+## Model
+We have selected two different machine learning classification models here: (RandomForest and Recursive Partitioning and Regression Trees) and predictions have been made on the basis of them.
+
+## Cross-validating
+We have a large training set which is divided into subparts of training and testing. We cross validate our model on the testing subpart of the main training set.
+
+## Out-of-sample error
+Here the variable to be predicted is and unordered factor. Hence OOSE = (1-Accuracy of model)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Download the datasets and read them
+```{r}
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+train <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+test <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+```
+
+## Load the libraries
+```{r}
+library(caret)
+library(rpart)
+library(randomForest)
+library(MASS)
+library(TH.data)
+library(ipred)
+set.seed(13)
+```
+
+### Remove unuseful parameters
+The parameters like ID, name, timestamp etc are not necessary for making a prediction. Hence all columns with headings containing name/timestamp/window are removed.
+
+The new dataframe such formed is called train1.
+A copy of train1 is made and stored as train2.
+
+```{r}
+NoNeed <- grep("name|timestamp|window|X", colnames(train), value=F)
+train1 <- train[,-NoNeed]
+train2 <- train1
+
+
+```
+
+### Remove predictors with large number of na entries
+Here we run a for loop on train1 and find the indices of the columns that have more than 45 % NAs. These columns are removed from the copy dataset train2.
+
+A training and testing partition is made for train2 with 75:25 ratio. The training set is called subTrain and test set is called subTest.
+
+```{r}
+
+
+for(i in 1:length(train1)) {
+        if( sum( is.na( train1[, i] ) ) /nrow(train1) >= 0.45){ 
+             for(j in 1:length(train2)) {
+            if( length( grep(names(train1[i]), names(train2)[j]) ) ==1)  { 
+                train2 <- train2[ , -j] 
+            }   
+        } 
+    }
+}
+
+train2 <- train2[,-c(14)]
+
+subsamples <- createDataPartition(y=train2$classe, p=0.75, list=FALSE)
+subTrain <- train2[subsamples, ] 
+subTest <- train2[-subsamples, ]
+```
+
+### Checking for any predictors with near zero variance
+We still want to remove any predictors that might be unnecessary. So we run the nearZeroVar function. 
+```{r}
+train3 <- nearZeroVar(train2, saveMetrics=TRUE)
+NZVindice <- which(train3$nzv == "TRUE")
+```
+
+No columns in train2 have near zero variance and so we move on.
+
+## Decision Tree model
+```{r}
+DTmodel <- rpart(classe ~ ., data=subTrain, method="class")
+predictDT <- predict(DTmodel, subTest, type = "class")
+confusionMatrix(predictDT, subTest$classe)
+```
+The accuracy we find here is only 72 percent.
+
+## Random Forest model
+```{r}
+RFmodel <- randomForest(classe ~. , data=subTrain,  type = "class")
+predictRF <- predict(RFmodel, subTest, type = "class")
+confusionMatrix(predictRF, subTest$classe)
+```
+A high accuracy of 99.45 % is found using the random forest model.
+
+## Bagging model
+```{r}
+Bmodel <- bagging(classe ~. , data=subTrain,  coob=TRUE)
+predictB <- predict(Bmodel, subTest, type = "class")
+confusionMatrix(predictB, subTest$classe)
+```
+The bagging model gives an accuracy of 98.8%.
+
+## Making predictions on the test dataset
+We select the model with the highest accuracy, i.e. the RandomForest model for making predictions on the test set.
+```{r}
+predictions <- predict(RFmodel, test, type = "class")
+predictions
+```
+
